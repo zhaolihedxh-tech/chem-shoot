@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>化学和射击 · 后台管理</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0b0f14; color: #e8f2ff; font-family: "Microsoft YaHei", system-ui, sans-serif;
+      padding: 28px; line-height: 1.7; }
+    h1 { font-size: 24px; margin-bottom: 6px; letter-spacing: 2px; }
+    .sub { color: #9fc3e8; font-size: 14px; margin-bottom: 24px; }
+    .card { background: #12161c; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+      padding: 18px 22px; margin-bottom: 18px; max-width: 640px; }
+    .card h2 { font-size: 16px; color: #7fd0ff; margin-bottom: 12px; letter-spacing: 1px; }
+    label { display: block; margin: 12px 0 4px; color: #cfe3f7; font-size: 14px; }
+    input[type=text], textarea { width: 100%; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #eaf2ff; font-size: 14px;
+      padding: 9px 12px; font-family: inherit; outline: none; }
+    input:focus, textarea:focus { border-color: #7fd0ff; }
+    textarea { min-height: 70px; resize: vertical; }
+    .row { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+    .row label { margin: 0; }
+    .toggle { position: relative; width: 52px; height: 28px; background: #333; border-radius: 16px;
+      cursor: pointer; transition: background 0.2s; }
+    .toggle::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px;
+      background: #fff; border-radius: 50%; transition: left 0.2s; }
+    .toggle.on { background: #2fae5f; }
+    .toggle.on::after { left: 27px; }
+    .toggle input { display: none; }
+    button { background: linear-gradient(180deg, #2f8f4f, #1f6f3f); color: #fff; border: none; border-radius: 8px;
+      padding: 11px 28px; font-size: 15px; letter-spacing: 2px; cursor: pointer; }
+    button:hover { filter: brightness(1.15); }
+    button.sec { background: linear-gradient(180deg, #3a6fa0, #2a5b85); }
+    #status { margin-top: 14px; font-size: 14px; min-height: 20px; }
+    #status.ok { color: #7dff9a; } #status.no { color: #ff7d6a; }
+    .hint { color: #6f8aa8; font-size: 12px; margin-top: 4px; }
+    .banned-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,90,74,0.16);
+      border: 1px solid rgba(255,90,74,0.4); color: #ffd0cb; padding: 4px 10px; border-radius: 6px; margin: 4px 6px 0 0; }
+    .banned-chip button { background: none; border: none; color: #ffd0cb; padding: 0 4px; font-size: 14px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>化学和射击 · 后台管理</h1>
+  <div class="sub">用于远程控制游戏是否可玩、按版本下架、发公告。改动会写入 GitHub 仓库的 config.json，玩家下次启动游戏时生效。</div>
+
+  <div class="card">
+    <h2>① GitHub 连接</h2>
+    <label>仓库（owner/仓库名，例如 zhaolih/chem-shoot）</label>
+    <input type="text" id="repo" placeholder="你的用户名/仓库名" />
+    <label>Personal Access Token（只勾选该仓库 Contents 写权限；不会保存到浏览器外）</label>
+    <input type="text" id="token" placeholder="ghp_xxxxxxxxxxxxxxxx" />
+    <label>config.json 路径（默认 config.json）</label>
+    <input type="text" id="path" value="config.json" />
+    <div class="hint">提示：token 只在本次页面会话使用，用于调用 GitHub Contents API 更新 config.json。</div>
+    <div class="row"><button class="sec" id="load-btn">读取当前配置</button></div>
+  </div>
+
+  <div class="card">
+    <h2>② 游戏开关</h2>
+    <div class="row">
+      <div class="toggle" id="enabled-toggle"><input type="checkbox" id="enabled" /></div>
+      <label for="enabled">允许游玩（关闭=整体停服，玩家无法进入）</label>
+    </div>
+    <label>当前版本（玩家反馈带的是这个版本号）</label>
+    <input type="text" id="version" value="v4.0" />
+    <label>被下架的版本（可添加多个版本禁止进入）</label>
+    <div id="banned-list"></div>
+    <div class="row">
+      <input type="text" id="banned-input" placeholder="如 v3.1 后回车/添加" style="width:200px" />
+      <button class="sec" id="banned-add">添加</button>
+    </div>
+    <label>公告（停服/下架时玩家看到的提示文字）</label>
+    <textarea id="announce" placeholder="例如：游戏维护中，请稍后再来。"></textarea>
+    <label>顶部横幅（可选，正常游玩时顶部显示的文字）</label>
+    <input type="text" id="banner" placeholder="例如：v4.0 公测中，欢迎反馈" />
+  </div>
+
+  <div class="card">
+    <h2>③ 保存到 GitHub</h2>
+    <button id="save-btn">保存配置并写入仓库</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let banned = [];
+    function renderBanned() {
+      $('banned-list').innerHTML = banned.map((v, i) =>
+        `<span class="banned-chip">${v}<button data-i="${i}">×</button></span>`).join('');
+      $('banned-list').querySelectorAll('button').forEach((b) =>
+        b.onclick = () => { banned.splice(Number(b.dataset.i), 1); renderBanned(); });
+    }
+    function collectCfg() {
+      return {
+        enabled: $('enabled').checked,
+        version: $('version').value.trim(),
+        banned: banned.slice(),
+        announce: $('announce').value,
+        banner: $('banner').value,
+        updated: new Date().toISOString().slice(0, 10),
+      };
+    }
+    function applyCfg(cfg) {
+      $('enabled').checked = !!cfg.enabled;
+      $('version').value = cfg.version || 'v4.0';
+      banned = Array.isArray(cfg.banned) ? cfg.banned : [];
+      $('announce').value = cfg.announce || '';
+      $('banner').value = cfg.banner || '';
+      renderBanned();
+      $('enabled-toggle').classList.toggle('on', !!cfg.enabled);
+    }
+    function setStatus(t, k) { $('status').textContent = t; $('status').className = k || ''; }
+
+    $('enabled-toggle').onclick = () => { $('enabled').checked = !$('enabled').checked; $('enabled-toggle').classList.toggle('on', $('enabled').checked); };
+    $('banned-add').onclick = () => {
+      const v = $('banned-input').value.trim();
+      if (v && !banned.includes(v)) { banned.push(v); $('banned-input').value = ''; renderBanned(); }
+    };
+
+    function githubUrl() { return `https://api.github.com/repos/${$('repo').value.trim()}/contents/${$('path').value.trim()}`; }
+    async function ghFetch(method, body) {
+      const res = await fetch(githubUrl(), {
+        method,
+        headers: {
+          'Authorization': 'Bearer ' + $('token').value.trim(),
+          'Accept': 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error('HTTP ' + res.status + ' ' + t); }
+      return res.json();
+    }
+
+    $('load-btn').onclick = async () => {
+      setStatus('读取中…', '');
+      try {
+        const data = await ghFetch('GET');
+        const content = atob(data.content.replace(/\n/g, ''));
+        applyCfg(JSON.parse(content));
+        setStatus('✅ 已读取当前配置（SHA ' + data.sha.slice(0, 7) + '）', 'ok');
+      } catch (e) { setStatus('❌ 读取失败：' + e.message, 'no'); }
+    };
+
+    $('save-btn').onclick = async () => {
+      setStatus('写入中…', '');
+      try {
+        const cfg = collectCfg();
+        // 读取现有文件拿 sha（更新必须带）
+        let sha = null;
+        try { const d = await ghFetch('GET'); sha = d.sha; } catch (e) { /* 无 sha 表示新建 */ }
+        await ghFetch('PUT', { message: '更新游戏配置 ' + new Date().toISOString(), content: btoa(unescape(encodeURIComponent(JSON.stringify(cfg, null, 2)))), sha });
+        setStatus('✅ 已保存！玩家下次启动游戏将看到新配置。', 'ok');
+      } catch (e) { setStatus('❌ 保存失败：' + e.message, 'no'); }
+    };
+
+    // 默认读取一次（方便从空开始）
+    applyCfg({ enabled: true, version: 'v4.0', banned: [], announce: '', banner: '' });
+  </script>
+</body>
+</html>
