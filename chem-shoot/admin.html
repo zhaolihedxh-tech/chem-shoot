@@ -63,7 +63,7 @@
       <label for="enabled">允许游玩（关闭=整体停服，玩家无法进入）</label>
     </div>
     <label>当前版本（玩家反馈带的是这个版本号）</label>
-    <input type="text" id="version" value="v3.5" />
+    <input type="text" id="version" value="v4.0" />
     <label>被下架的版本（可添加多个版本禁止进入）</label>
     <div id="banned-list"></div>
     <div class="row">
@@ -73,7 +73,7 @@
     <label>公告（停服/下架时玩家看到的提示文字）</label>
     <textarea id="announce" placeholder="例如：游戏维护中，请稍后再来。"></textarea>
     <label>顶部横幅（可选，正常游玩时顶部显示的文字）</label>
-    <input type="text" id="banner" placeholder="例如：v3.5 公测中，欢迎反馈" />
+    <input type="text" id="banner" placeholder="例如：v4.0 公测中，欢迎反馈" />
   </div>
 
   <div class="card">
@@ -103,7 +103,7 @@
     }
     function applyCfg(cfg) {
       $('enabled').checked = !!cfg.enabled;
-      $('version').value = cfg.version || 'v3.5';
+      $('version').value = cfg.version || 'v4.0';
       banned = Array.isArray(cfg.banned) ? cfg.banned : [];
       $('announce').value = cfg.announce || '';
       $('banner').value = cfg.banner || '';
@@ -156,7 +156,7 @@
     };
 
     // 默认读取一次（方便从空开始）
-    applyCfg({ enabled: true, version: 'v3.5', banned: [], announce: '', banner: '' });
+    applyCfg({ enabled: true, version: 'v4.0', banned: [], announce: '', banner: '' });
   </script>
 </body>
 </html>
